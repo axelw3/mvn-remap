@@ -44,7 +44,20 @@
             <artifactId>maven-project</artifactId>
             <version>2.2.1</version>
         </dependency>
+
+        <dependency>
+            <groupId>net.fabricmc</groupId>
+            <artifactId>tiny-remapper</artifactId>
+            <version>0.12.2</version>
+        </dependency>
     </dependencies>
+
+    <repositories>
+        <repository>
+        <id>Fabric</id>
+        <url>https://maven.fabricmc.net/</url>
+        </repository>
+    </repositories>
 
     <reporting>
         <plugins>
