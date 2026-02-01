@@ -27,15 +27,19 @@ import net.fabricmc.tinyremapper.TinyUtils;
 public class MvnRemap extends AbstractMojo{
 
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
-    MavenProject project;
+    private MavenProject project;
+
+    @Parameter(property = "inputFile", required = true)
+    private String inputFile;
+
+    @Parameter(property = "outputFile", required = true)
+    private String outputFile;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         System.out.println("Detta fungerar (" + project.getArtifactId() + ")!!!");
 
         // 1) remappa obfuskerad --> Fabric "intermediary mappings" (class_xxxx, etc.)
-        final String inputFile = "server-1.21.1.jar";
-        final String outputFile = "minecraft-1.21.1-intermediary.jar";
         final String mappingsFile = "1.21.1.tiny";
         final String fromNamespace = "official";
         final String toNamespace = "intermediary";
