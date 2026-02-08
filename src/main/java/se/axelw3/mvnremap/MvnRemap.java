@@ -2,7 +2,10 @@ package se.axelw3.mvnremap;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -10,6 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.zip.ZipFile;
 
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -32,6 +36,9 @@ public class MvnRemap extends AbstractMojo{
     private MavenProject project;
 */
 
+    @Parameter(property = "inputArchive", required = false, defaultValue = "")
+    private String inputArchive;
+
     @Parameter(property = "inputFile", required = true)
     private String inputFile;
 
@@ -41,12 +48,17 @@ public class MvnRemap extends AbstractMojo{
     @Parameter(property = "mappingsFile", required = true)
     private String mappingsFile;
 
+    @Parameter(property = "fromNamespace", required = true, defaultValue = "official")
+    private String fromNamespace;
+
+    @Parameter(property = "toNamespace", required = true, defaultValue = "intermediary")
+    private String toNamespace;
+
+    private final static String NAME_INPUT = "input.jar";
+    private final static String NAME_TMP_ARCHIVE = "archive.tmp";
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
-        // 1) remappa obfuskerad --> Fabric "intermediary mappings" (class_xxxx, etc.)
-        final String fromNamespace = "official";
-        final String toNamespace = "intermediary";
-
         ConsoleLogger logger = new ConsoleLogger();
 
         Path output = Paths.get(outputFile);
@@ -55,7 +67,48 @@ public class MvnRemap extends AbstractMojo{
             return;
         }
 
-        final Path input = fetchIfAppropriate(inputFile, "input.jar", logger);
+        final Path input;
+        if(inputArchive != null && !inputArchive.isEmpty()){
+            input = Paths.get(NAME_INPUT);
+            final Path srcPath = fetchIfAppropriate(inputArchive, NAME_TMP_ARCHIVE, logger);
+            try(
+                final ZipFile zipFile = new ZipFile(srcPath.toFile());
+                final InputStream in = zipFile.getInputStream(zipFile.getEntry(inputFile));
+                final FileOutputStream out = new FileOutputStream(input.toFile());
+            ){
+                out.getChannel().transferFrom(new ReadableByteChannel(){
+                    @Override
+                    public void close() throws IOException{ in.close(); }
+
+                    @Override
+                    public boolean isOpen(){ return in != null; }
+
+                    @Override
+                    public int read(ByteBuffer dst) throws IOException{
+                        int beg = dst.position(),
+                            rem = dst.remaining();
+
+                        if(dst.hasArray()){
+                            int rd = in.read(dst.array(), beg + dst.arrayOffset(), rem);
+                            if(rd > 0) dst.position(beg + rd);
+                            return rd;
+                        }
+
+                        byte[] arr = new byte[rem];
+                        int rd = in.read(arr, 0, rem);
+                        if(rd > 0){
+                            dst.put(arr, 0, rd);
+                        }
+
+                        return rd;
+                    }
+                }, 0, Long.MAX_VALUE);
+            }catch(IOException e){
+                logger.error("Couldn't open input archive.");
+                System.exit(1);
+            }
+        }else input = fetchIfAppropriate(inputFile, NAME_INPUT, logger);
+
         if (!Files.isReadable(input)) {
             logger.error("Couldn't read " + input + ".");
             System.exit(1);
@@ -103,22 +156,29 @@ public class MvnRemap extends AbstractMojo{
     }
 
     @SuppressWarnings("ConvertToTryWithResources")
-    private static Path fetchIfAppropriate(String srcPath, String targetFileName, ConsoleLogger logger){
-        if(srcPath.startsWith("http://") || srcPath.startsWith("https://")){
-            final Path targetFile = Paths.get(targetFileName);
-            try(FileOutputStream fos = new FileOutputStream(targetFile.toFile())){
-                URL url = new URL(srcPath);
-                ReadableByteChannel rbc = java.nio.channels.Channels.newChannel(url.openStream());
+    private static Path fetchIfAppropriate(String srcPath, String nameOverride, ConsoleLogger logger){
+        if(!srcPath.startsWith("http://") && !srcPath.startsWith("https://")) return Paths.get(srcPath);
+        try{
+            final URL url = new URL(srcPath);
+            final Path p = Paths.get(nameOverride == null   ? url.getPath()
+                                                            : nameOverride);
+            try(
+                final FileOutputStream fos = new FileOutputStream(p.toFile(), false);
+                final ReadableByteChannel rbc = java.nio.channels.Channels.newChannel(url.openStream());
+            ){
                 fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
-                rbc.close();
             }catch(IOException err){
                 logger.error("Couldn't fetch file from url.");
                 System.exit(1);
+                return null;
             }
 
-            return targetFile;
+            return p;
+        }catch(MalformedURLException err){
+            logger.error("Malformed file url.");
+            System.exit(1);
         }
 
-        return Paths.get(srcPath);
+        return null;
     }
 }
