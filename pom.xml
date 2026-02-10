@@ -34,18 +34,6 @@
         </dependency>
 
         <dependency>
-            <groupId>org.apache.maven</groupId>
-            <artifactId>maven-core</artifactId>
-            <version>3.9.4</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.maven</groupId>
-            <artifactId>maven-project</artifactId>
-            <version>2.2.1</version>
-        </dependency>
-
-        <dependency>
             <groupId>net.fabricmc</groupId>
             <artifactId>tiny-remapper</artifactId>
             <version>0.12.2</version>
